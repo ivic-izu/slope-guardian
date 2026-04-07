@@ -51,4 +51,145 @@ footer{background:#0d1525;border-top:1px solid #2a3550;padding:10px 20px;flex-sh
 .info-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#8899aa}
 .info-dot{width:6px;height:6px;border-radius:50%;background:var(--wine);flex-shrink:0}
 .operate-hint{display:flex;gap:16px}
-.op-item{display:flex;align-items:center;gap:4px;f
+.op-item{display:flex;align-items:center;gap:4px;font-size:11px;color:#8899aa}
+.op-key{background:#2a3550;border-radius:3px;padding:2px 6px;font-size:10px;color:var(--white)}
+@media(max-width:600px){.operate-hint{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo-area">
+    <div class="logo-icon">&#9968;</div>
+    <div class="logo-text">
+      <div class="logo-main">SLOPE GUARDIAN</div>
+      <div class="logo-sub">斜面診断システム｜3Dモデル確認</div>
+    </div>
+  </div>
+  <div class="case-badge">CASE No.001</div>
+</header>
+<div class="viewer-container">
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-icon">&#9968;</div>
+    <div class="loading-text">3Dモデルを読み込んでいます...</div>
+    <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+  </div>
+  <canvas id="canvas"></canvas>
+  <button class="rotate-btn" id="rotateBtn">&#9646;&#9646; 回転を止める</button>
+</div>
+<footer>
+  <div class="footer-content">
+    <div class="footer-info">
+      <div class="info-item"><div class="info-dot"></div><span>撮影：UAV空撮（フォトグラメトリ）</span></div>
+      <div class="info-item"><div class="info-dot"></div><span>処理：Agisoft Metashape</span></div>
+      <div class="info-item"><div class="info-dot"></div><span>株式会社アイビック</span></div>
+    </div>
+    <div class="operate-hint">
+      <div class="op-item"><span class="op-key">ドラッグ</span><span>回転</span></div>
+      <div class="op-item"><span class="op-key">ピンチ</span><span>拡大縮小</span></div>
+      <div class="op-item"><span class="op-key">2本指</span><span>移動</span></div>
+    </div>
+  </div>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  var overlay=document.getElementById('loadingOverlay');
+  var canvas=document.getElementById('canvas');
+  var btn=document.getElementById('rotateBtn');
+  var autoRotating=true;
+  var rotateSpeed=0.005;
+
+  var W=canvas.parentElement.clientWidth;
+  var H=canvas.parentElement.clientHeight;
+
+  var scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x1a2340);
+  var camera=new THREE.PerspectiveCamera(45,W/H,0.1,10000);
+  var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true});
+  renderer.setSize(W,H);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.outputEncoding=THREE.sRGBEncoding;
+
+  var ambient=new THREE.AmbientLight(0xffffff,0.8);
+  scene.add(ambient);
+  var dir=new THREE.DirectionalLight(0xffffff,0.6);
+  dir.position.set(100,200,100);
+  scene.add(dir);
+
+  // 回転ボタン
+  btn.addEventListener('click',function(){
+    autoRotating=!autoRotating;
+    if(autoRotating){
+      btn.innerHTML='&#9646;&#9646; 回転を止める';
+      btn.classList.remove('stopped');
+    } else {
+      btn.innerHTML='&#9654; 回転を再開する';
+      btn.classList.add('stopped');
+    }
+  });
+
+  var script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+  script.onload=function(){
+    var controls=new THREE.OrbitControls(camera,renderer.domElement);
+    controls.enableDamping=true;
+    controls.dampingFactor=0.05;
+    controls.minPolarAngle=0;
+    controls.maxPolarAngle=Math.PI;
+    controls.enableZoom=true;
+    controls.enablePan=true;
+
+    // ユーザー操作時は自動回転を止める
+    controls.addEventListener('start',function(){
+      autoRotating=false;
+      btn.innerHTML='&#9654; 回転を再開する';
+      btn.classList.add('stopped');
+    });
+
+    var loaderScript=document.createElement('script');
+    loaderScript.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
+    loaderScript.onload=function(){
+      var loader=new THREE.GLTFLoader();
+      loader.load('./slope_001_small-v1.glb',function(gltf){
+        var model=gltf.scene;
+        var box=new THREE.Box3().setFromObject(model);
+        var center=box.getCenter(new THREE.Vector3());
+        model.position.sub(center);
+        scene.add(model);
+        var size=box.getSize(new THREE.Vector3()).length();
+        camera.position.set(0,size*0.5,size*1.2);
+        controls.target.set(0,0,0);
+        controls.update();
+        overlay.classList.add('hidden');
+      },null,function(err){
+        overlay.classList.add('hidden');
+        console.error(err);
+      });
+    };
+    document.head.appendChild(loaderScript);
+
+    function animate(){
+      requestAnimationFrame(animate);
+      if(autoRotating){
+        scene.rotation.y+=rotateSpeed;
+      }
+      controls.update();
+      renderer.render(scene,camera);
+    }
+    animate();
+  };
+  document.head.appendChild(script);
+
+  window.addEventListener('resize',function(){
+    var W2=canvas.parentElement.clientWidth;
+    var H2=canvas.parentElement.clientHeight;
+    camera.aspect=W2/H2;
+    camera.updateProjectionMatrix();
+    renderer.setSize(W2,H2);
+  });
+
+  setTimeout(function(){overlay.classList.add('hidden')},20000);
+})();
+</script>
+</body>
+</html>
